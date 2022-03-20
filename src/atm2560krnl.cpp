@@ -15,6 +15,7 @@
 #define ABOUT (cseq) "NoteOS 8-bit v1.0 , Arch: (ATMega2560), 2022"
 
 #include "drivers/graphic/sh1106_driver.hpp"
+#include "drivers/storage/spisdstorage.hpp"
 
 #define MAX_DRIVER_ABOUT_NAME 64
 #define IDVC_DRIVER_MAX_REGISTRY_SIZE 32
@@ -91,78 +92,116 @@ const UINT8 epd_bitmap_noteos [] PROGMEM = {
 	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
 };
 
+extern unsigned int __heap_start;
+extern void *__brkval;
+
 IDVCHIDriver_Dsply* selected_graphic = NULL;
 
 BOOLN is_logging_to_graphic = false;
 
-struct idvc_device {
+typedef struct idvc_device_t {
     idvc_id id;
     IDVCHIDriver* drvr;
-};
+} idvc_device_t;
+
+
+String make_hex(UINT32 dec){
+    String hex = String(dec, HEX);
+    hex.toUpperCase();
+    return "0x" + hex;
+}
 
 
 class IDVC_Registry {
     private:
-        struct idvc_device *registry = NULL;
-        IDVC_DRIVER_REGISTRY_SIZE_DATA_TYPE index = -1;
-        size_t used_size = 0;
+        idvc_device_t *registry = NULL;
+        UINT8 index = 0;
 
     public:
         IDVC_Registry(){
-            used_size = sizeof(struct idvc_device);
-            registry = (struct idvc_device*) malloc(used_size);
+            registry = (idvc_device_t*) malloc(sizeof(idvc_device_t));
         }
 
         ERR add_dvc(IDVCHIDriver* drvr, idvc_id id){
-            used_size = sizeof(struct idvc_device) * ++index + 1;
-            registry = (struct idvc_device*) realloc(registry, used_size);
+
+            registry = (idvc_device_t*) realloc(registry, ++index * sizeof(idvc_device_t));
             if(registry == NULL){
-                NTSKernel::nt_log(("[IDVCRegistry]: Driver registry is out of memory. Operation cancelled."), CRIT);
+                NTSKernel::nt_log(F("idvc_bus: Driver registry is out of memory. Operation cancelled."), CRIT);
                 return IDVCREGISTRY_OUT_OF_MEMORY;
             }
-            registry[index] = (struct idvc_device){id, drvr};
+            registry[index - 1] = (idvc_device_t){id, drvr};
 
             UINT16 drvr_name = strlen(drvr -> drvr_name().c_str());
             if(drvr_name > MAX_DRIVER_ABOUT_NAME){
                 drvr_name = MAX_DRIVER_ABOUT_NAME;
             }
 
-            cseq msg = "[IDVCRegistry]: Driver [" + drvr -> drvr_name() + "] has been added to registry.";
+            cseq msg = "idvc_bus: Driver [" + drvr -> drvr_name() + "] has been added to registry.";
             NTSKernel::nt_log(msg, INFO);
 
             return OK;
         }
 
         ERR get_dvc(idvc_id id, IDVCHIDriver** source_drvr){
-
-            for(int i = 0; i < index + 1; i++){
-                struct idvc_device drvr = registry[i];
+            for(int i = 0; i < index; i++){
+                idvc_device_t drvr = registry[i];
                 if(drvr.id == id){
                     *source_drvr = drvr.drvr;
                     return OK;
                 }
             }
-
+            
+            *source_drvr = NULL;
             return IDVCREGISTRY_NO_DRIVER;
         }
 
-        ERR get_dvcs(struct idvc_device** driver, IDVC_DRIVER_REGISTRY_SIZE_DATA_TYPE *__size){
+        ERR get_dvcs(idvc_device_t** driver, IDVC_DRIVER_REGISTRY_SIZE_DATA_TYPE *__size){
             if(registry == NULL){
-                NTSKernel::nt_log(("[IDVCRegistry] Driver register is empty or not allocated yet."), WARN);
+                NTSKernel::nt_log(F("idvc_bus: Driver register is empty or not allocated yet."), WARN);
                 return IDVCREGISTRY_NO_DRIVER;
                 *driver = NULL;
             }
             *driver = registry;
-            *__size = get_drivers_count();
+            if(__size != NULL) *__size = get_drivers_count();
+            return OK;
+        }
+
+        ERR delete_dvc(idvc_id type){
+            idvc_device_t* new_registry;
+            //ERR err = NTSKernel::nt_malloc((void**) &new_registry, get_drivers_count() - 1 * sizeof(idvc_device));
+            //if(err != OK){
+            //   NTSKernel::nt_log("idvc_bus: cannot rebuild registry, malloc fault: " + make_hex(err), INFO);
+            //    return err;
+            //}
+
+            // TODO
+
+            return OK;
+
+        }
+
+        ERR stop_dvcs(BOOLN __clear_registry){
+            idvc_device_t* devices;
+            get_dvcs(&devices, NULL);
+            for(IDVC_DRIVER_REGISTRY_SIZE_DATA_TYPE i = 0; i < get_drivers_count(); i++){
+                NTSKernel::nt_log("idvc_bus: Stopping device " + String(devices[i].drvr -> drvr_name()), INFO);
+                devices[i].drvr -> stop_device();
+            }
+
+            if(__clear_registry) {
+                NTSKernel::nt_log(F("idvc_bus: Uninstalling all drivers."), INFO);
+                NTSKernel::nt_mem_free(registry);
+            }
+
             return OK;
         }
         
         size_t get_used_space(){
-            return used_size;
+            return sizeof(idvc_device_t) * index;
         }
 
         IDVC_DRIVER_REGISTRY_SIZE_DATA_TYPE get_drivers_count(){
-            return index + 1;
+            return index;
         }
 };
 
@@ -174,51 +213,50 @@ struct umsb_device {
 };
 
 
-VOID init_drivers(){
-    NTSKernel::nt_log("[NTSKernel] Initializing drivers.", INFO);
+void init_drivers(){
+    NTSKernel::nt_log(F("kernel: Initializing drivers."), INFO);
 
     SH1106OLEDDriver* scrn_drvr = new SH1106OLEDDriver; 
+    SPISDStorage* storage_drvr = new SPISDStorage;
     NTSKernel::nt_load_idvc_drvr(scrn_drvr, IDVC_DISPLAY);
+    NTSKernel::nt_load_idvc_drvr(storage_drvr, IDVC_STORAGE);
 }
 
-String make_hex(UINT32 dec){
-    String hex = String(dec, HEX);
-    hex.toUpperCase();
-    return "0x" + hex;
-}
 
-VOID start_drivers(){
-    struct idvc_device* drivers;
+void start_drivers(){
+    NTSKernel::nt_log("kernel: Starting all devices", INFO);
+
+    idvc_device_t* drivers;
     IDVC_DRIVER_REGISTRY_SIZE_DATA_TYPE size;
 
     ERR err = idvc_registry -> get_dvcs(&drivers, &size);
     if(err == OK){
         for(IDVC_DRIVER_REGISTRY_SIZE_DATA_TYPE i = 0; i < size; i++){
-            struct idvc_device device = drivers[i];
+            idvc_device_t device = drivers[i];
             IDVCHIDriver* driver = device.drvr;
             cseq device_hex = make_hex(device.id);
-            cseq msg = "[IDVCDriverBus] Starting [" + device_hex + "] device with [" + String(driver -> drvr_name()) + "] driver.";
-            cseq msg2 = "[IDVCDriverBus] Device [" + device_hex + "] use transport [" + make_hex(driver -> get_trnsprt()) + "]";
+            cseq msg = "idvc_bus: Starting [" + device_hex + "] device with [" + String(driver -> drvr_name()) + "] driver.";
+            cseq msg2 = "idvc_bus: Device [" + device_hex + "] use transport [" + make_hex(driver -> get_trnsprt()) + "]";
             NTSKernel::nt_log(msg, INFO);
             NTSKernel::nt_log(msg2, INFO);
 
             driver -> begin_device();
             if(!driver -> available()){
-                String msg3 = "[IDVCDriverBus] At the moment device [" + device_hex + "] is unavailable";
+                String msg3 = "idvc_bus: At the moment device [" + device_hex + "] is unavailable";
                 NTSKernel::nt_log((msg3.c_str()), INFO);
             }
         }
     }else {
-        String msg = "[IDVCDriverBus] Cannot fetch drivers for start sequence due error: [" + make_hex(err)  + "]";
+        String msg = "idvc_bus: Cannot fetch drivers for start sequence due error: [" + make_hex(err)  + "]";
         NTSKernel::nt_log((msg.c_str()), ERROR);
     }
 }
 
-VOID init_graphic(){    
+void init_graphic(){    
     IDVCHIDriver* drvr;
     IDVCHIDriver_Dsply* display;
     if(NTSKernel::nt_get_idvc_drvr(&drvr, IDVC_DISPLAY) != OK){
-        NTSKernel::nt_log(("[NTSKernel] Graphic not found in current environment."), INFO);
+        NTSKernel::nt_log(F("kernel: Graphic not found in current environment."), INFO);
         return;
     }
     
@@ -227,12 +265,12 @@ VOID init_graphic(){
     if(display -> available()){
         display -> clr_scrn();
         selected_graphic = display;
-        String msg = "[NTSKernel] Graphics device [" + String(display -> drvr_name()) + "] is selected as primary monitor.";
+        String msg = "kernel: Graphics device [" + String(display -> drvr_name()) + "] is selected as primary monitor.";
         NTSKernel::nt_log(msg, INFO);
         display -> render_bitmap(0, 0, epd_bitmap_noteos, 128, 64, WHITE);
         
     }else {
-        NTSKernel::nt_log(("[NTSKernel] Graphics is found but display device is unreachable at the moment."), INFO);
+        NTSKernel::nt_log(F("kernel: Graphics is found but display device is unreachable at the moment."), INFO);
     }
 }
 
@@ -240,29 +278,31 @@ BOOLN is_booted = false;
 
 cseq translate_loglevel(LOG_LEVEL level){
     if(level == INFO){
-        return (cseq) "INFO";
+        return "INFO";
     }else if(level == WARN){
-        return (cseq) "WARN";
+        return "WARN";
+    }else if(level == ERROR){
+        return "ERROR";    
     }else if(level ==  CRIT){
-        return (cseq) "CRIT";
+        return "CRIT";
     }else if(level == TRACE){
-        return (cseq) "TRACE";
+        return "TRACE";
     }else if(level == DEBUG){
-        return (cseq) "DEBUG";
+        return "DEBUG";
     }else if(level == CRIT){
-        return (cseq) "CRIT";
+        return "CRIT";
     }else if(level == PANIC){
-        return (cseq) "PANIC";
+        return "PANIC";
     }else {
-        return (cseq) "nolevel";
+        return "nolevel";
     }
 }
 
-VOID NTSKRNL NTSKernel::nt_log(const cseq msg, LOG_LEVEL level){
+void NTSKRNL NTSKernel::nt_log(const cseq msg, LOG_LEVEL level){
     cseq level_str = translate_loglevel(level);
     if(strcmp(level_str.c_str(), "nolevel") != 0){
         Serial.print("[");
-        Serial.print(String(millis(), DEC));
+        Serial.print(String(millis() / 1000.0, 4));
         Serial.print("] [");
         Serial.print(level_str);
         Serial.print("]: ");
@@ -277,9 +317,9 @@ VOID NTSKRNL NTSKernel::nt_log(const cseq msg, LOG_LEVEL level){
 
 }
 
-VOID NTSKRNL NTSKernel::nt_boot_sequence(VOID) {
+void NTSKRNL NTSKernel::nt_boot_sequence(void) {
     if(is_booted){
-        nt_log(("Boot sequence request while system running."), WARN);    
+        nt_log(F("Boot sequence request while system running."), WARN);    
     }
 
     delay(2000);
@@ -293,13 +333,13 @@ VOID NTSKRNL NTSKernel::nt_boot_sequence(VOID) {
 
     start_drivers();
 
-    nt_log(("[NTSKernel] Loading graphics."), INFO);
+    nt_log(F("kernel: Loading graphics."), INFO);
     init_graphic();
 
     is_booted = true;
 }
 
-VOID NTSKRNL NTSKernel::nt_srl_trnmt(const cseq data){
+void NTSKRNL NTSKernel::nt_srl_trnmt(const cseq data){
 
 }
 
@@ -314,29 +354,28 @@ ERR NTSKRNL NTSKernel::nt_load_idvc_drvr(IDVCHIDriver* drvr, idvc_id id)
     return OK;
 }
 
-VOID NTSKRNL NTSKernel::nt_cls_krnl_sequence(){
+void NTSKRNL NTSKernel::nt_cls_krnl_sequence(){
     if(is_booted){
-        nt_log(("[NTSKernel]: Shutting down kernel."), INFO);
+        nt_log(F("kernel: Shutting down kernel."), INFO);
 
         delete idvc_registry;
     }else {
-        nt_log(("[NTSKernel]: Requested kernel close operation but system is not already booted."), ERROR);
+        nt_log(F("kernel: Requested kernel close operation but system is not already booted."), ERROR);
     }
 }
 
 UINT32 NTSKRNL NTSKernel::nt_get_free_sram(){
-    extern int __heap_start, *__brkval;
 	int v;
 	return (int)&v - (__brkval == 0 ? (int)&__heap_start : (int)__brkval);
 }
 
-VOID NTSKRNL NTSKernel::nt_mem_free(void* ptr){
+void NTSKRNL NTSKernel::nt_mem_free(void* ptr){
     if(ptr != NULL){
         free(ptr);
         ptr = 0;
     }else {
         char buf[128];
-        sprintf(buf, "[NTSKernel]: Pointer at %p cannot be released because address is already 0.", &ptr);
+        sprintf(buf, "kernel: Pointer at %p cannot be released because address is already 0.", &ptr);
         nt_log(buf, ERROR);
     }
 }
@@ -353,8 +392,7 @@ ERR NTSKRNL NTSKernel::nt_get_dsply(IDVCHIDriver_Dsply** driver){
 ERR NTSKRNL NTSKernel::nt_get_idvc_drvr(IDVCHIDriver** drvr, idvc_id id){
     ERR err = idvc_registry->get_dvc(id, drvr);
     if(err != OK){
-        String msg = "Driver [" + make_hex(id) + "] is cannot be get from registry due: [" + make_hex(err) + "]";
-        nt_log((msg.c_str()), WARN);
+        nt_log("kernel: Driver [" + make_hex(id) + "] is cannot be get from registry due: [" + make_hex(err) + "]", WARN);
         *drvr = NULL;
         return err;
     }
@@ -362,8 +400,124 @@ ERR NTSKRNL NTSKernel::nt_get_idvc_drvr(IDVCHIDriver** drvr, idvc_id id){
     return OK;
 }
 
-VOID NTSKRNL nt_set_logging_to_graphic(BOOLN is_logging){
+void NTSKRNL nt_set_logging_to_graphic(BOOLN is_logging){
     is_logging_to_graphic = is_logging;
+}
+
+ERR NTSKRNL NTSKernel::nt_open_file(file_t** file, PATH path, BOOLN create_file, BOOLN write_file){
+    IDVCHIDriver* driver;
+    ERR err = nt_get_idvc_drvr(&driver, IDVC_STORAGE);
+    
+    if(err != OK){
+        if(err == IDVC_ERROR_NO_DEVICE){
+            nt_log(F("kernel: no storage device found, cannot open file, nt_open_file();"), WARN);
+            return err;
+        }else {
+            nt_log("kernel: cannot get storage device, error: " + make_hex(err) + ", aborting: nt_open_file();", ERROR);
+            return err;
+        }
+    }
+
+    nt_log("kernel: opening file " + String(path) + " from storage " + String(driver -> drvr_name()), INFO);
+    IDVCHIDriver_Storage* storage = reinterpret_cast<IDVCHIDriver_Storage*>(driver);
+    return storage -> open_file(file, path, create_file, write_file);
+}
+
+ERR NTSKRNL NTSKernel::nt_close_file(file_t* file){
+    IDVCHIDriver* driver = NULL;
+    ERR err = nt_get_idvc_drvr(&driver, IDVC_STORAGE);
+
+    if(err != OK){
+        if(err == IDVC_ERROR_NO_DEVICE){
+            nt_log(F("kernel: no storage device found, cannot open file, nt_close_file();"), WARN);
+            return err;
+        }else {
+            nt_log("kernel: cannot get storage device, error: " + make_hex(err) + ", aborting: nt_close_file();", ERROR);
+            return err;
+        }
+    }
+ 
+    IDVCHIDriver_Storage* storage = reinterpret_cast<IDVCHIDriver_Storage*>(driver);
+    String filename = storage -> get_filename(file);
+    nt_log("kernel: closing file " + filename + " from storage " + String(driver -> drvr_name()), INFO);
+
+
+    return storage -> close_file(file);
+}
+
+ERR NTSKRNL NTSKernel::nt_flush_file(file_t* file){
+    IDVCHIDriver* driver = NULL;
+    ERR err = nt_get_idvc_drvr(&driver, IDVC_STORAGE);
+
+    if(err != OK){
+        if(err == IDVC_ERROR_NO_DEVICE){
+            nt_log(F("kernel: no storage device found, cannot open file, nt_flush_file();"), WARN);
+            return err;
+        }else {
+            nt_log("kernel: cannot get storage device, error: " + make_hex(err) + ", aborting: nt_flush_file();", ERROR);
+            return err;
+        }
+    }
+
+    IDVCHIDriver_Storage* storage = reinterpret_cast<IDVCHIDriver_Storage*>(driver);
+    return storage -> flush_file(file);
+}
+
+ERR NTSKRNL NTSKernel::nt_delete_file(file_t* file_t){
+    return OPERATION_UNAVAILABLE;
+}
+
+ERR NTSKRNL NTSKernel::nt_read_file(file_t* file, UINT8** buf, UINT16 size){
+    return OPERATION_UNAVAILABLE;
+}
+
+
+ERR NTSKRNL NTSKernel::nt_malloc(void** __mem, size_t size){
+    if(size > nt_get_free_sram()){
+        nt_log("kernel: cannot malloc memory for size " + cseq(size) + ", not enough memory, size > nt_get_free_sram();", CRIT);
+        return NT_ALLOC_NOT_ENOUGH_MEMORY;
+    }
+    *__mem = malloc(size);
+    
+    if(*__mem == NULL){
+        nt_log("kernel: cannot malloc memory for size " + cseq(size ) + ", malloc() == NULL", PANIC);
+        nt_reboot(C("malloc()"), C("allocation fault"), true);
+        return NT_ALLOC_ALLOC_FAULT;
+    }
+
+    return OK;
+}
+
+ERR NTSKRNL NTSKernel::nt_calloc(void** __mem, size_t size){
+    return OPERATION_UNAVAILABLE;
+}
+
+void NTSKRNL NTSKernel::nt_reboot(char* source, char* reason, BOOLN force){
+    nt_log("kernel: src: " + String(source) + ", reason: " + String(reason) + ", reboot requested.", INFO);
+    if(!force){
+        idvc_registry -> stop_dvcs(true);
+    }
+    nt_log(F("kernel: restart confirmed, calling reboot, goodbye!"), INFO);
+    ((void(*)(void))0)();
+}
+
+ERR NTSKRNL NTSKernel::nt_write_file(file_t* file, UINT8* buf, UINT16 size){
+    IDVCHIDriver* driver = NULL;
+    ERR err = nt_get_idvc_drvr(&driver, IDVC_STORAGE);
+
+    
+    if(err != OK){
+        if(err == IDVC_ERROR_NO_DEVICE){
+            nt_log(F("kernel: no storage device found, cannot open file, nt_write_file();"), WARN);
+            return err;
+        }else {
+            nt_log("kernel: cannot get storage device, error: " + make_hex(err) + ", aborting: nt_write_file();", ERROR);
+            return err;
+        }
+    }
+
+    IDVCHIDriver_Storage* storage = reinterpret_cast<IDVCHIDriver_Storage*>(driver);
+    return storage -> write_to_file(file, buf, size);
 }
 
 

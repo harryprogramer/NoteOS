@@ -16,7 +16,7 @@ class SH1106OLEDDriver : public IDVCHIDriver_Dsply {
     public:
         NTSKRNL SH1106OLEDDriver();
 
-        ERR NTSKRNL clr_scrn(VOID);
+        ERR NTSKRNL clr_scrn();
 
         ERR NTSKRNL get_scrn_size(SIZE16_P size);
 
@@ -32,11 +32,11 @@ class SH1106OLEDDriver : public IDVCHIDriver_Dsply {
 
         trnsprt NTSKRNL get_trnsprt();
 
-        VOID NTSKRNL begin_device();
+        void NTSKRNL begin_device();
 
         NTSKRNL cseq drvr_name();
 
-        NTSKRNL VOID stop_device();
+        NTSKRNL void stop_device();
 
         ERR NTSKRNL write(UINT8 byte);
 
@@ -44,6 +44,8 @@ class SH1106OLEDDriver : public IDVCHIDriver_Dsply {
 
         ERR NTSKRNL render_bitmap(INT16 x, INT16 y, const UINT8 *bitmap, INT16 w,
                               INT16 h, UINT16 color);
+
+        ERR NTSKRNL reverse_colors(BOOLN is_reverse);
 };
 
 

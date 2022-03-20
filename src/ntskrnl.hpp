@@ -2,7 +2,7 @@
 #define NTSKRNL
 
 #include <WString.h>
-
+#include <SD.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -16,59 +16,77 @@ typedef unsigned int UINT32 __attribute__((__mode__(__SI__)));
 
 typedef UINT8 BYTE;
 
+#define C(literal) ((char*) literal)
+
 #define COLOR UINT8
 #define ERR UINT8
 #define LOG_LEVEL UINT8
 
-#define INFO (LOG_LEVEL) 0x0A
-#define WARN (LOG_LEVEL) 0x0B
-#define ERROR (LOG_LEVEL) 0x0C
-#define TRACE (LOG_LEVEL) 0x0D
-#define DEBUG (LOG_LEVEL) 0x0E
-#define CRIT (LOG_LEVEL) 0x0F
-#define PANIC (LOG_LEVEL) 0xAF
+#define INFO (LOG_LEVEL) 0x01
+#define WARN (LOG_LEVEL) 0x02
+#define ERROR (LOG_LEVEL) 0x03
+#define TRACE (LOG_LEVEL) 0x04
+#define DEBUG (LOG_LEVEL) 0x05
+#define CRIT (LOG_LEVEL) 0x06
+#define PANIC (LOG_LEVEL) 0x07
 
 #define NGL_WHITE (COLOR) 1
 #define NGL_BLACK (COLOR) 0
 
-#define idvc_id UINT16
-
-#define IDVC_DISPLAY (idvc_id) 0x000A
+#define idvc_id UINT8
 
 #define trnsprt UINT8
 
-#define TRNSPRT_I2C (trnsprt) 0xFF
-#define TRNSPRT_UMSB (trnsprt) 0x0B
-#define TRNSPRT_ETHERNET (trnsprt) 0x0C
-#define TRNSPRT_DIGITAL (trnsprt) 0x0D
-#define TRNSPRT_OTHER (trnsprt) 0x0E
-#define TRNSPRT_UNKNOWN (trnsprt) 0x0F
+#define TRNSPRT_I2C (trnsprt) 0x08
+#define TRNSPRT_UMSB (trnsprt) 0x09
+#define TRNSPRT_ETHERNET (trnsprt) 0x0A
+#define TRNSPRT_DIGITAL (trnsprt) 0x0B
+#define TRNSPRT_OTHER (trnsprt) 0x0C
+#define TRNSPRT_SPI   (trnsprt) 0x0D
+#define TRNSPRT_UNKNOWN (trnsprt) 0x0E
 
 /* errors */
-#define NGL_ERROR_NOGRAPHICDEVICE (ERR) 0x01
-#define NGL_ERROR_DEVICECOM (ERR) 0x02
-#define NGL_ERROR_INCORRECT_COORD (ERR) 0x03  
-#define NGL_ERROR_INCORRECT_COLOR (ERR) 0x04
-#define IDVC_ERROR_NO_DEVICE (ERR) 0x04
-#define IDVC_ERROR_DEVICE_NOT_RESPONDING (ERR) 0x05
-#define IDVC_ERROR_DEVICE_UNREACHABLE (ERR) 0x06
-#define UMSB_ERROR_DEVICE_UNREACHABLE (ERR) 0x07
-#define UMSB_ERROR_DEVICE_OUT_OF_SYNC (ERR) 0x08
-#define UMSB_ERROR_DEVICE_NOT_RESPONDING (ERR) 0x09
+#define NGL_ERROR_NOGRAPHICDEVICE (ERR) 0x0E
+#define NGL_ERROR_DEVICECOM (ERR) 0x0F
+#define NGL_ERROR_INCORRECT_COORD (ERR) 0x10
+#define NGL_ERROR_INCORRECT_COLOR (ERR) 0x11
+#define IDVC_ERROR_NO_DEVICE (ERR) 0x12
+#define IDVC_ERROR_DEVICE_NOT_RESPONDING (ERR) 0x13
+#define IDVC_ERROR_DEVICE_UNREACHABLE (ERR) 0x14
+#define UMSB_ERROR_DEVICE_UNREACHABLE (ERR) 0x15
+#define UMSB_ERROR_DEVICE_OUT_OF_SYNC (ERR) 0x16
+#define UMSB_ERROR_DEVICE_NOT_RESPONDING (ERR) 0x17
 
-#define OPERATION_UNAVAILABLE 0x0B
-#define UNDEFINED   (ERR) 0x0A
-#define OK          (ERR) 0
+#define OPERATION_UNAVAILABLE 0x19
+#define UNDEFINED   (ERR) 0x1A
+#define OK          (ERR) 0x1B
 
-#define VOID void /* void */
+#define NT_FILE_NOT_FOUND 0x1C
+#define NT_FILE_CLOSED    0x1D
+
+#define IDVC_DISPLAY (idvc_id) 0x1E
+#define IDVC_STORAGE (idvc_id) 0x1F
+
+#define NT_ALLOC_NOT_ENOUGH_MEMORY  0x20
+#define NT_ALLOC_ALLOC_FAULT        0x21
+
+#define IO_FAULT  0x22
+
+#define void void /* void */
 
 typedef String cseq; /* char sequence **/
 typedef bool BOOLN;
 
-#define PATH cseq
+#define PATH char*
 
 typedef struct umsb_device umsb_device_t;
-typedef struct file file_t;
+typedef struct nt_storage nt_storage_t;
+
+typedef struct file_t {
+  char* filename;
+  File sd_file;
+} file_t;
+
 typedef UINT8 umsb_addr;
 
 typedef struct SIZE8 {
@@ -96,17 +114,35 @@ class IDVCHIDriver {
 
       virtual NTSKRNL trnsprt get_trnsprt() = 0;
 
-      virtual NTSKRNL VOID begin_device() = 0;
+      virtual NTSKRNL void begin_device() = 0;
 
       virtual NTSKRNL cseq drvr_name() = 0;
 
-      virtual NTSKRNL VOID stop_device() = 0;
+      virtual NTSKRNL void stop_device() = 0;
 };
 
-class IDVCHIDriver_Dsply: virtual public IDVCHIDriver {
+class IDVCHIDriver_Storage : virtual public IDVCHIDriver {
+  public:
+    virtual NTSKRNL ERR open_file(file_t** file, PATH filename, BOOLN open_file, BOOLN write_file) = 0;
+
+    virtual NTSKRNL ERR read_file(file_t* file, UINT8* buf, UINT16 size) = 0;
+
+    virtual NTSKRNL ERR flush_file(file_t* file) = 0;
+    
+    virtual NTSKRNL ERR write_to_file(file_t* file, UINT8* buf, UINT16 size) = 0;
+
+    virtual NTSKRNL ERR delete_file(file_t* file) = 0;
+
+    virtual NTSKRNL ERR close_file(file_t* file) = 0;
+
+    virtual NTSKRNL String get_filename(file_t* file) = 0;
+
+};
+
+class IDVCHIDriver_Dsply : virtual public IDVCHIDriver {
   public:
     
-    virtual ERR NTSKRNL clr_scrn(VOID) = 0;
+    virtual ERR NTSKRNL clr_scrn() = 0;
 
     virtual ERR NTSKRNL get_scrn_size(SIZE16_P size) = 0;
 
@@ -122,15 +158,17 @@ class IDVCHIDriver_Dsply: virtual public IDVCHIDriver {
 
     virtual ERR NTSKRNL write(UINT8 byte, BOOLN flush) = 0;
 
-	virtual ERR NTSKRNL render_bitmap(INT16 x, INT16 y, const UINT8 *bitmap, INT16 w,
+	  virtual ERR NTSKRNL render_bitmap(INT16 x, INT16 y, const UINT8 *bitmap, INT16 w,
                               INT16 h, UINT16 color) = 0;
+
+    virtual ERR NTSKRNL reverse_colors(BOOLN is_reverse) = 0;
 };
 
 namespace NTSKernel {
 
-  VOID NTSKRNL nt_boot_sequence(VOID);
+  void NTSKRNL nt_boot_sequence();
 
-  VOID NTSKRNL nt_srl_trnmt(cseq data);
+  void NTSKRNL nt_srl_trnmt(cseq data);
 
   /**
    * @brief 
@@ -156,24 +194,37 @@ namespace NTSKernel {
 
   ERR NTSKRNL nt_get_idvc_drvr(IDVCHIDriver** drvr, idvc_id id);
 
-  VOID NTSKRNL nt_log(const cseq msg, LOG_LEVEL level);
+  void NTSKRNL nt_log(const cseq msg, LOG_LEVEL level);
 
-  ERR NTSKRNL nt_opn_file(file* file, PATH path);
-
-  ERR NTSKRNL nt_cls_file(file* file);
-
-  VOID NTSKRNL nt_cls_krnl_sequence();
+  void NTSKRNL nt_cls_krnl_sequence();
 
   UINT32 NTSKRNL nt_get_free_sram();
 
-  VOID NTSKRNL nt_mem_free(void* ptr);
+  void NTSKRNL nt_mem_free(void* ptr);
 
-  VOID NTSKRNL nt_krnl_cycle();
+  ERR NTSKRNL nt_malloc(void** __mem, size_t size);
 
-  VOID NTSKRNL nt_set_logging_to_graphic(BOOLN is_loggins);
+  ERR NTSKRNL nt_calloc(void** __mem, size_t size);
+
+  void NTSKRNL nt_krnl_cycle();
+
+  void NTSKRNL nt_set_logging_to_graphic(BOOLN is_loggins);
 
   cseq NTSKRNL nt_about();
-  
+
+  ERR NTSKRNL nt_open_file(file_t** file_t, PATH path, BOOLN create_file, BOOLN write_file);
+
+  ERR NTSKRNL nt_close_file(file_t* file_t);
+
+  ERR NTSKRNL nt_flush_file(file_t* file_t);
+
+  ERR NTSKRNL nt_delete_file(file_t* file_t);
+
+  ERR NTSKRNL nt_read_file(file_t* file, UINT8** buf, UINT16 size);
+
+  ERR NTSKRNL nt_write_file(file_t* file, UINT8* buf, UINT16 size);
+
+  void NTSKRNL nt_reboot(char* source, char* reason, BOOLN force);
 };
 
 #ifdef __cplusplus

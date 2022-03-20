@@ -12,7 +12,7 @@ NTSKRNL SH1106OLEDDriver::SH1106OLEDDriver(){
     scrn = new Adafruit_SH1106(4);
 }
 
-ERR NTSKRNL SH1106OLEDDriver::clr_scrn(VOID){
+ERR NTSKRNL SH1106OLEDDriver::clr_scrn(void){
     scrn -> clearDisplay();
     
     return OK;
@@ -48,7 +48,7 @@ trnsprt NTSKRNL SH1106OLEDDriver::get_trnsprt(){
     return TRNSPRT_I2C;
 }
 
-VOID NTSKRNL SH1106OLEDDriver::begin_device(){
+void NTSKRNL SH1106OLEDDriver::begin_device(){
     nt_log(F("[SH1106] Initializng SH1106 OLED Display"), INFO);
     scrn -> begin(SH1106_SWITCHCAPVCC, 0x3C);
     scrn -> display();
@@ -56,14 +56,13 @@ VOID NTSKRNL SH1106OLEDDriver::begin_device(){
     scrn -> setTextSize(1);
     scrn -> setTextColor(WHITE);
     scrn -> setCursor(0, 0);
-    scrn -> invertDisplay(true);
 }
 
 NTSKRNL cseq SH1106OLEDDriver::drvr_name(){
-    return ABOUT;
+    return F(ABOUT);
 }
 
-NTSKRNL VOID SH1106OLEDDriver::stop_device(){
+NTSKRNL void SH1106OLEDDriver::stop_device(){
     String msg PROGMEM = "Stopping [" + String(ABOUT) + "] device.";
     nt_log(msg, INFO);
     delete scrn;
@@ -102,5 +101,12 @@ ERR NTSKRNL SH1106OLEDDriver::render_bitmap(INT16 x, INT16 y, const UINT8 *bitma
 
     return OK;
 }
+
+ERR NTSKRNL SH1106OLEDDriver::reverse_colors(BOOLN is_reverse){
+    scrn -> invertDisplay(is_reverse);
+    scrn -> display();
+
+    return OK;
+};
 
 #endif
