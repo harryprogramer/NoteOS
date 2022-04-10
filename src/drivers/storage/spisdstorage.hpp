@@ -38,6 +38,10 @@ class SPISDStorage : public IDVCHIDriver_Storage {
         NTSKRNL cseq drvr_name();
 
         NTSKRNL void stop_device();
+
+        NTSKRNL BOOLN is_open(file_t* file);
+
+        NTSKRNL ERR restart_device();
 };
 
 #endif

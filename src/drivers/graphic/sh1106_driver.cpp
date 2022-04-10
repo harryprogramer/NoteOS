@@ -109,4 +109,9 @@ ERR NTSKRNL SH1106OLEDDriver::reverse_colors(BOOLN is_reverse){
     return OK;
 };
 
+ERR NTSKRNL SH1106OLEDDriver::restart_device(){
+    return OK;
+};
+
+
 #endif

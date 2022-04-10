@@ -66,11 +66,15 @@ typedef UINT8 BYTE;
 
 #define IDVC_DISPLAY (idvc_id) 0x1E
 #define IDVC_STORAGE (idvc_id) 0x1F
+#define IDVC_GSM     (idvc_id) 0x23
 
 #define NT_ALLOC_NOT_ENOUGH_MEMORY  0x20
 #define NT_ALLOC_ALLOC_FAULT        0x21
 
+#define NT_INVALID_EXECUTABLE_SIGNATURE 0x22
+
 #define IO_FAULT  0x22
+
 
 #define void void /* void */
 
@@ -88,6 +92,8 @@ typedef struct file_t {
 } file_t;
 
 typedef UINT8 umsb_addr;
+typedef char* gsm_number;
+
 
 typedef struct SIZE8 {
   UINT8 x;
@@ -119,6 +125,8 @@ class IDVCHIDriver {
       virtual NTSKRNL cseq drvr_name() = 0;
 
       virtual NTSKRNL void stop_device() = 0;
+
+      virtual NTSKRNL ERR restart_device() = 0;
 };
 
 class IDVCHIDriver_Storage : virtual public IDVCHIDriver {
@@ -136,6 +144,8 @@ class IDVCHIDriver_Storage : virtual public IDVCHIDriver {
     virtual NTSKRNL ERR close_file(file_t* file) = 0;
 
     virtual NTSKRNL String get_filename(file_t* file) = 0;
+
+    virtual NTSKRNL BOOLN is_open(file_t* file) = 0;
 
 };
 
@@ -162,6 +172,17 @@ class IDVCHIDriver_Dsply : virtual public IDVCHIDriver {
                               INT16 h, UINT16 color) = 0;
 
     virtual ERR NTSKRNL reverse_colors(BOOLN is_reverse) = 0;
+};
+
+class IDVCDriver_GSM : virtual public IDVCHIDriver {
+  public:
+    // return null if there is no call to answer
+    // else return current phone number of the person who's calling
+    virtual gsm_number NTSKRNL incoming_status() = 0;
+
+    virtual uint8_t NTSKRNL signal_strength() = 0;
+
+    virtual BOOLN NTSKRNL is_sim_inserted() = 0;
 };
 
 namespace NTSKernel {
@@ -220,11 +241,17 @@ namespace NTSKernel {
 
   ERR NTSKRNL nt_delete_file(file_t* file_t);
 
-  ERR NTSKRNL nt_read_file(file_t* file, UINT8** buf, UINT16 size);
+  ERR NTSKRNL nt_read_file(file_t* file, UINT8* buf, UINT16 size);
+
+  cseq NTSKRNL nt_get_filename(file_t* file);
 
   ERR NTSKRNL nt_write_file(file_t* file, UINT8* buf, UINT16 size);
 
+  BOOLN NTSKRNL nt_is_file_open(file_t* file);
+
   void NTSKRNL nt_reboot(char* source, char* reason, BOOLN force);
+
+  ERR NTSKRNL nt_run_app(file_t* file);
 };
 
 #ifdef __cplusplus

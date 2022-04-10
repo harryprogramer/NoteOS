@@ -21,8 +21,7 @@ ERR check_file(file_t* file){
 ERR SPISDStorage::open_file(file_t** file, PATH filename, BOOLN create_file, BOOLN write_file){
     UINT8 permissions = (write_file ? O_READ | O_WRITE : O_READ) | (create_file ? O_CREAT : 0);
     nt_log("sd_card: opening file: " + cseq(filename) + " with permissions: 0x" + String(permissions, HEX), INFO);
-
-    File sd_file = SD.open(filename, FILE_WRITE);
+    File sd_file = SD.open(filename, permissions);
 
     if(!sd_file){
         nt_log("sd_card: file " + String(filename) + " not found or cannot be open", WARN);
@@ -45,8 +44,9 @@ ERR SPISDStorage::read_file(file_t* file, UINT8* buf, UINT16 size){
         return err;
     }
 
-    while(file -> sd_file.available()){
-        buf[i] = file -> sd_file.read();
+    File sd_file = file -> sd_file;
+    while(sd_file.available()){
+        buf[i] = sd_file.read();
 
         if(++i > size){
             break;
@@ -135,4 +135,18 @@ cseq SPISDStorage::drvr_name(){
 
 void SPISDStorage::stop_device(){
 
+}
+
+NTSKRNL BOOLN SPISDStorage::is_open(file_t* file){
+    ERR err = check_file(file);
+    if(err != OK){
+        return false;
+    }
+
+    File sd_file = file -> sd_file;
+    return sd_file;
+}
+
+NTSKRNL ERR SPISDStorage::restart_device(){
+    return OK;
 }

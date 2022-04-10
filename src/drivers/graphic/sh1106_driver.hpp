@@ -46,6 +46,8 @@ class SH1106OLEDDriver : public IDVCHIDriver_Dsply {
                               INT16 h, UINT16 color);
 
         ERR NTSKRNL reverse_colors(BOOLN is_reverse);
+
+        ERR NTSKRNL restart_device();
 };
 
 

@@ -41,6 +41,9 @@ class OLEDIDVCHIDDriver : public IDVCHIDriver_Dsply {
         cseq NTSKRNL drvr_name();
 
         VOID NTSKRNL stop_device(); 
+        
+        ERR NTSKRNL restart_device();
+    
 };
 
 

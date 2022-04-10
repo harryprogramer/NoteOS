@@ -83,6 +83,10 @@ NTSKRNL cseq OLEDIDVCHIDDriver::drvr_name(){
 NTSKRNL VOID OLEDIDVCHIDDriver::stop_device(){
     
 }
+
+NTSKRNL ERR OLEDIDVCHIDDriver::restart_device(){
+    return OK;
+}
 #endif
 
  

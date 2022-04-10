@@ -18,5 +18,18 @@
 
 #define SSD1306_DRIVER          FALSE    
 #define SH1106_DRIVER           TRUE
+#define SIM800L_DRIVER          TRUE
+
+
+
+
+#define SIM800L_RX 12
+#define SIM800L_TX 11
+
+#ifdef __AVR_ATmega2560__
+#if SIM800L_RX < 11
+#error "unsupported rx pin, read limitations on: https://www.arduino.cc/en/Reference/softwareSerial"
+#endif
 
 #endif 
+#endif

@@ -1,20 +1,36 @@
 #ifndef ATM2560KRNL
 #define ATM2650KRNL
 
+#undef __AVR_ATmega2560__
 #define __AVR_ATmega2560__ // only for code highlight, remove while compiling
 
 #if defined(__AVR_ATmega2560__)
 
 #include <Arduino.h>
 #include <WString.h>
+#include <WCharacter.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "ntskrnl.hpp"
+//#include "utils.h"
 
 #define ABOUT (cseq) "NoteOS 8-bit v1.0 , Arch: (ATMega2560), 2022"
 
+#include "drivers/packets_manager.h"
+
+#if SH1106_DRIVER
 #include "drivers/graphic/sh1106_driver.hpp"
+#endif
+
+#if SSD1306_DRIVER
+#include "drivers/graphic/ssd1306_driver.hpp"
+#endif
+
+#if SIM800L_DRIVER
+#include "drivers/gsm/sim800l_driver.hpp"
+#endif
+
 #include "drivers/storage/spisdstorage.hpp"
 
 #define MAX_DRIVER_ABOUT_NAME 64
@@ -167,7 +183,7 @@ class IDVC_Registry {
         }
 
         ERR delete_dvc(idvc_id type){
-            idvc_device_t* new_registry;
+            //idvc_device_t* new_registry;
             //ERR err = NTSKernel::nt_malloc((void**) &new_registry, get_drivers_count() - 1 * sizeof(idvc_device));
             //if(err != OK){
             //   NTSKernel::nt_log("idvc_bus: cannot rebuild registry, malloc fault: " + make_hex(err), INFO);
@@ -216,9 +232,22 @@ struct umsb_device {
 void init_drivers(){
     NTSKernel::nt_log(F("kernel: Initializing drivers."), INFO);
 
-    SH1106OLEDDriver* scrn_drvr = new SH1106OLEDDriver; 
-    SPISDStorage* storage_drvr = new SPISDStorage;
+#if SH1106_DRIVER
+    SH1106OLEDDriver* scrn_drvr = new SH1106OLEDDriver;
     NTSKernel::nt_load_idvc_drvr(scrn_drvr, IDVC_DISPLAY);
+#endif
+
+#if SSD1306_DRIVER 
+    OLEDIDVCHIDDriver* scrn_drvr = new OLEDIDVCHIDDriver;
+    NTSKernel::nt_load_idvc_drvr(scrn_drvr, IDVC_DISPLAY);
+#endif
+
+#if SIM800L_DRIVER
+    SIM800L_Driver* gsm_drvr = new SIM800L_Driver;
+    NTSKernel::nt_load_idvc_drvr(gsm_drvr, IDVC_GSM);
+#endif
+
+    SPISDStorage* storage_drvr = new SPISDStorage;
     NTSKernel::nt_load_idvc_drvr(storage_drvr, IDVC_STORAGE);
 }
 
@@ -298,7 +327,7 @@ cseq translate_loglevel(LOG_LEVEL level){
     }
 }
 
-void NTSKRNL NTSKernel::nt_log(const cseq msg, LOG_LEVEL level){
+void NTSKRNL NTSKernel::nt_log(const cseq msg, LOG_LEVEL level = INFO){
     cseq level_str = translate_loglevel(level);
     if(strcmp(level_str.c_str(), "nolevel") != 0){
         Serial.print("[");
@@ -467,8 +496,22 @@ ERR NTSKRNL NTSKernel::nt_delete_file(file_t* file_t){
     return OPERATION_UNAVAILABLE;
 }
 
-ERR NTSKRNL NTSKernel::nt_read_file(file_t* file, UINT8** buf, UINT16 size){
-    return OPERATION_UNAVAILABLE;
+ERR NTSKRNL NTSKernel::nt_read_file(file_t* file, UINT8* buf, UINT16 size){
+    IDVCHIDriver* driver = NULL;
+    ERR err = nt_get_idvc_drvr(&driver, IDVC_STORAGE);
+
+    if(err != OK){
+        if(err == IDVC_ERROR_NO_DEVICE){
+            nt_log(F("kernel: no storage device found, cannot open file, nt_write_file();"), WARN);
+            return err;
+        }else {
+            nt_log("kernel: cannot get storage device, error: " + make_hex(err) + ", aborting: nt_read_file();", ERROR);
+            return err;
+        }
+    }
+
+    IDVCHIDriver_Storage* storage = reinterpret_cast<IDVCHIDriver_Storage*>(driver);
+    return storage -> read_file(file, buf, size);
 }
 
 
@@ -520,6 +563,83 @@ ERR NTSKRNL NTSKernel::nt_write_file(file_t* file, UINT8* buf, UINT16 size){
     return storage -> write_to_file(file, buf, size);
 }
 
+BOOLN NTSKRNL NTSKernel::nt_is_file_open(file_t* file){
+    IDVCHIDriver* driver = NULL;
+    ERR err = nt_get_idvc_drvr(&driver, IDVC_STORAGE);
+
+    
+    if(err != OK){
+        if(err == IDVC_ERROR_NO_DEVICE){
+            nt_log(F("kernel: no storage device found, cannot open file, nt_is_file_open();"), WARN);
+            return err;
+        }else {
+            nt_log("kernel: cannot get storage device, error: " + make_hex(err) + ", aborting: nt_is_file_open();", ERROR);
+            return err;
+        }
+    }
+
+    IDVCHIDriver_Storage* storage = reinterpret_cast<IDVCHIDriver_Storage*>(driver);
+    return storage -> is_open(file);
+}
+
+UINT32 get_int32(UINT8* buf){
+    return (buf[0] << 24) + (buf[1] << 16) + (buf[2] << 8) + buf[3];
+}
+
+UINT16 get_int16(UINT8* buf){
+    return (buf[0] << 8 | buf[1]);
+}
+
+void get_cstr(UINT8* buf, char* _src, UINT16 size){
+    
+}
+
+ERR NTSKRNL NTSKernel::nt_run_app(file_t* file){
+    UINT8 header[24];
+    if(file == NULL){
+        return NT_FILE_CLOSED;
+    }
+    cseq filename = nt_get_filename(file);
+
+    nt_log("kernel: opening executable file " + nt_get_filename(file));
+
+    nt_read_file(file, header, 24);
+    UINT32 app_version = get_int32(&header[0]);
+    //UINT16 nte_version = get_int16(&header[4]);
+    char app_name[13];
+    memcpy(app_name, &header[6], 12);
+    
+    for(int i = 0; i < 12; i++){
+        if(!isAscii(app_name[i])){
+            nt_log("kernel: app " + filename + " has invalid name at " + String(i, DEC) + " byte", ERROR);
+            nt_log("kernel: aborting launch for " + filename + " app", INFO);
+            return NT_INVALID_EXECUTABLE_SIGNATURE;
+        }
+    }
+    
+    app_name[12] = '\0';
+    nt_log("kernel: running [" + nt_get_filename(file) + "] executable app: " + String(app_name) + ", version: " + String(app_version) + "");
+
+    return OK;
+}
+
+cseq NTSKRNL NTSKernel::nt_get_filename(file_t* file){
+    IDVCHIDriver* driver = NULL;
+    ERR err = nt_get_idvc_drvr(&driver, IDVC_STORAGE);
+
+    
+    if(err != OK){
+        if(err == IDVC_ERROR_NO_DEVICE){
+            nt_log(F("kernel: no storage device found, cannot open file, nt_get_filename();"), WARN);
+            return "";
+        }else {
+            nt_log("kernel: cannot get storage device, error: " + make_hex(err) + ", aborting: nt_get_filename();", ERROR);
+            return "";
+        }
+    }
+    IDVCHIDriver_Storage* storage = reinterpret_cast<IDVCHIDriver_Storage*>(driver);
+    return storage -> get_filename(file);
+}
 
 #endif
 

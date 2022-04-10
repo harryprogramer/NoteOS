@@ -7,22 +7,48 @@ using namespace NTSKernel;
 
 void setup() {
   nt_boot_sequence();
-  Serial.println("boot end");
+
   IDVCHIDriver_Dsply* dsply;
   nt_get_dsply(&dsply);
 
   dsply -> reverse_colors(true);
-  nt_log("Free MEM: " + cseq(nt_get_free_sram()), INFO);
-  file_t* file;
-  Serial.println("nt_open_file: " + String(nt_open_file(&file, C("test.txt"), true, true), HEX));
-  UINT8 data[]{'s', 'i', 'e', 'm', 'a'};
-  Serial.println("nt_write_file: " + String(nt_write_file(file, data, 4), HEX));
-  //nt_flush_file(file);
-  Serial.println("nt_close_file: " + String(nt_close_file(file), HEX));
+
   
+  file_t* app_file;
+  if(nt_open_file(&app_file, C("app.nte"), false, false) != OK){
+    nt_log("can't open file", WARN);
+  }else {
+    nt_run_app(app_file);
+  }
+
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
 }
+#endif
+
+#if 0
+#include "drivers/packets_manager.h"
+#include <SoftwareSerial.h>
+#include <Arduino.h>
+SoftwareSerial gsm2(SIM800L_RX, SIM800L_TX);
+
+void setup() {
+  Serial.begin(9600);
+  Serial.println("hello");
+  gsm2.begin(9600);
+}
+
+void loop() {
+  while (Serial.available()) {
+      delay(1);
+      gsm2.write(Serial.read());
+  }
+  while (gsm2.available()) {
+       Serial.write(gsm2.read());
+  }
+  
+}
+
 #endif
