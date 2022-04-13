@@ -3,16 +3,12 @@
 
 #include <WString.h>
 #include <SD.h>
+#include "ntbase.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef signed int INT8 __attribute__((__mode__(__QI__)));
-typedef unsigned int UINT8 __attribute__((__mode__(__QI__)));
-typedef signed int INT16 __attribute__((__mode__(__HI__)));
-typedef unsigned int UINT16 __attribute__((__mode__(__HI__)));
-typedef signed int INT32 __attribute__((__mode__(__SI__)));
-typedef unsigned int UINT32 __attribute__((__mode__(__SI__)));
 
 typedef UINT8 BYTE;
 
@@ -185,11 +181,32 @@ class IDVCDriver_GSM : virtual public IDVCHIDriver {
     virtual BOOLN NTSKRNL is_sim_inserted() = 0;
 };
 
+class IDVCDriver_PowerManager : virtual public IDVCHIDriver {
+  public:
+    enum PowerSource {
+      BATTERY = 0x0A,
+      EXTERNAL_POWER = 0x0B
+    };
+
+    typedef struct battery {
+      uint8_t percent;
+      uint16_t voltage;
+      uint16_t capacity;;
+    } battery, *battery_p;
+
+    virtual NTSKRNL PowerSource get_power_source();
+
+    virtual NTSKRNL ERR get_battery(battery*);
+
+    virtual NTSKRNL ERR shutdown_power();
+
+};
+
 namespace NTSKernel {
 
   void NTSKRNL nt_boot_sequence();
 
-  void NTSKRNL nt_srl_trnmt(cseq data);
+  void NTSKRNL nt_srl_trnmt(cseq);
 
   /**
    * @brief 
@@ -215,7 +232,7 @@ namespace NTSKernel {
 
   ERR NTSKRNL nt_get_idvc_drvr(IDVCHIDriver** drvr, idvc_id id);
 
-  void NTSKRNL nt_log(const cseq msg, LOG_LEVEL level);
+  void NTSKRNL nt_log(const cseq msg, LOG_LEVEL level = INFO);
 
   void NTSKRNL nt_cls_krnl_sequence();
 

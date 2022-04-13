@@ -13,6 +13,9 @@
 #include <string.h>
 
 #include "ntskrnl.hpp"
+
+#include "utils/utils.h"
+#include "nte/nte_engine.hpp"
 //#include "utils.h"
 
 #define ABOUT (cseq) "NoteOS 8-bit v1.0 , Arch: (ATMega2560), 2022"
@@ -121,12 +124,6 @@ typedef struct idvc_device_t {
 } idvc_device_t;
 
 
-String make_hex(UINT32 dec){
-    String hex = String(dec, HEX);
-    hex.toUpperCase();
-    return "0x" + hex;
-}
-
 
 class IDVC_Registry {
     private:
@@ -186,7 +183,7 @@ class IDVC_Registry {
             //idvc_device_t* new_registry;
             //ERR err = NTSKernel::nt_malloc((void**) &new_registry, get_drivers_count() - 1 * sizeof(idvc_device));
             //if(err != OK){
-            //   NTSKernel::nt_log("idvc_bus: cannot rebuild registry, malloc fault: " + make_hex(err), INFO);
+            //   NTSKernel::nt_log("idvc_bus: cannot rebuild registry, malloc fault: " + String(make_hex8(err)), INFO);
             //    return err;
             //}
 
@@ -263,9 +260,9 @@ void start_drivers(){
         for(IDVC_DRIVER_REGISTRY_SIZE_DATA_TYPE i = 0; i < size; i++){
             idvc_device_t device = drivers[i];
             IDVCHIDriver* driver = device.drvr;
-            cseq device_hex = make_hex(device.id);
+            cseq device_hex = String(make_hex8(device.id));
             cseq msg = "idvc_bus: Starting [" + device_hex + "] device with [" + String(driver -> drvr_name()) + "] driver.";
-            cseq msg2 = "idvc_bus: Device [" + device_hex + "] use transport [" + make_hex(driver -> get_trnsprt()) + "]";
+            cseq msg2 = "idvc_bus: Device [" + device_hex + "] use transport [" + String(make_hex8(driver -> get_trnsprt())) + "]";
             NTSKernel::nt_log(msg, INFO);
             NTSKernel::nt_log(msg2, INFO);
 
@@ -276,7 +273,7 @@ void start_drivers(){
             }
         }
     }else {
-        String msg = "idvc_bus: Cannot fetch drivers for start sequence due error: [" + make_hex(err)  + "]";
+        String msg = "idvc_bus: Cannot fetch drivers for start sequence due error: [" + String(make_hex8(err))  + "]";
         NTSKernel::nt_log((msg.c_str()), ERROR);
     }
 }
@@ -327,7 +324,7 @@ cseq translate_loglevel(LOG_LEVEL level){
     }
 }
 
-void NTSKRNL NTSKernel::nt_log(const cseq msg, LOG_LEVEL level = INFO){
+void NTSKRNL NTSKernel::nt_log(const cseq msg, LOG_LEVEL level){
     cseq level_str = translate_loglevel(level);
     if(strcmp(level_str.c_str(), "nolevel") != 0){
         Serial.print("[");
@@ -421,7 +418,7 @@ ERR NTSKRNL NTSKernel::nt_get_dsply(IDVCHIDriver_Dsply** driver){
 ERR NTSKRNL NTSKernel::nt_get_idvc_drvr(IDVCHIDriver** drvr, idvc_id id){
     ERR err = idvc_registry->get_dvc(id, drvr);
     if(err != OK){
-        nt_log("kernel: Driver [" + make_hex(id) + "] is cannot be get from registry due: [" + make_hex(err) + "]", WARN);
+        nt_log("kernel: Driver [" + String(make_hex8(id)) + "] is cannot be get from registry due: [" + String(make_hex8(err)) + "]", WARN);
         *drvr = NULL;
         return err;
     }
@@ -442,7 +439,7 @@ ERR NTSKRNL NTSKernel::nt_open_file(file_t** file, PATH path, BOOLN create_file,
             nt_log(F("kernel: no storage device found, cannot open file, nt_open_file();"), WARN);
             return err;
         }else {
-            nt_log("kernel: cannot get storage device, error: " + make_hex(err) + ", aborting: nt_open_file();", ERROR);
+            nt_log("kernel: cannot get storage device, error: " + String(make_hex8(err)) + ", aborting: nt_open_file();", ERROR);
             return err;
         }
     }
@@ -461,7 +458,7 @@ ERR NTSKRNL NTSKernel::nt_close_file(file_t* file){
             nt_log(F("kernel: no storage device found, cannot open file, nt_close_file();"), WARN);
             return err;
         }else {
-            nt_log("kernel: cannot get storage device, error: " + make_hex(err) + ", aborting: nt_close_file();", ERROR);
+            nt_log("kernel: cannot get storage device, error: " + String(make_hex8(err)) + ", aborting: nt_close_file();", ERROR);
             return err;
         }
     }
@@ -483,7 +480,7 @@ ERR NTSKRNL NTSKernel::nt_flush_file(file_t* file){
             nt_log(F("kernel: no storage device found, cannot open file, nt_flush_file();"), WARN);
             return err;
         }else {
-            nt_log("kernel: cannot get storage device, error: " + make_hex(err) + ", aborting: nt_flush_file();", ERROR);
+            nt_log("kernel: cannot get storage device, error: " + String(make_hex8(err)) + ", aborting: nt_flush_file();", ERROR);
             return err;
         }
     }
@@ -505,7 +502,7 @@ ERR NTSKRNL NTSKernel::nt_read_file(file_t* file, UINT8* buf, UINT16 size){
             nt_log(F("kernel: no storage device found, cannot open file, nt_write_file();"), WARN);
             return err;
         }else {
-            nt_log("kernel: cannot get storage device, error: " + make_hex(err) + ", aborting: nt_read_file();", ERROR);
+            nt_log("kernel: cannot get storage device, error: " + String(make_hex8(err)) + ", aborting: nt_read_file();", ERROR);
             return err;
         }
     }
@@ -554,7 +551,7 @@ ERR NTSKRNL NTSKernel::nt_write_file(file_t* file, UINT8* buf, UINT16 size){
             nt_log(F("kernel: no storage device found, cannot open file, nt_write_file();"), WARN);
             return err;
         }else {
-            nt_log("kernel: cannot get storage device, error: " + make_hex(err) + ", aborting: nt_write_file();", ERROR);
+            nt_log("kernel: cannot get storage device, error: " + String(make_hex8(err)) + ", aborting: nt_write_file();", ERROR);
             return err;
         }
     }
@@ -573,7 +570,7 @@ BOOLN NTSKRNL NTSKernel::nt_is_file_open(file_t* file){
             nt_log(F("kernel: no storage device found, cannot open file, nt_is_file_open();"), WARN);
             return err;
         }else {
-            nt_log("kernel: cannot get storage device, error: " + make_hex(err) + ", aborting: nt_is_file_open();", ERROR);
+            nt_log("kernel: cannot get storage device, error: " + String(make_hex8(err)) + ", aborting: nt_is_file_open();", ERROR);
             return err;
         }
     }
@@ -582,44 +579,25 @@ BOOLN NTSKRNL NTSKernel::nt_is_file_open(file_t* file){
     return storage -> is_open(file);
 }
 
-UINT32 get_int32(UINT8* buf){
-    return (buf[0] << 24) + (buf[1] << 16) + (buf[2] << 8) + buf[3];
-}
-
-UINT16 get_int16(UINT8* buf){
-    return (buf[0] << 8 | buf[1]);
-}
-
 void get_cstr(UINT8* buf, char* _src, UINT16 size){
     
 }
 
-ERR NTSKRNL NTSKernel::nt_run_app(file_t* file){
-    UINT8 header[24];
-    if(file == NULL){
+ERR NTSKRNL NTSKernel::nt_run_app(file_t* app_file){
+    if(app_file == NULL){
         return NT_FILE_CLOSED;
     }
-    cseq filename = nt_get_filename(file);
+    cseq filename = nt_get_filename(app_file);
 
-    nt_log("kernel: opening executable file " + nt_get_filename(file));
+    nt_log("kernel: opening executable file " + nt_get_filename(app_file));
 
-    nt_read_file(file, header, 24);
-    UINT32 app_version = get_int32(&header[0]);
-    //UINT16 nte_version = get_int16(&header[4]);
-    char app_name[13];
-    memcpy(app_name, &header[6], 12);
-    
-    for(int i = 0; i < 12; i++){
-        if(!isAscii(app_name[i])){
-            nt_log("kernel: app " + filename + " has invalid name at " + String(i, DEC) + " byte", ERROR);
-            nt_log("kernel: aborting launch for " + filename + " app", INFO);
-            return NT_INVALID_EXECUTABLE_SIGNATURE;
-        }
+    napp_t* application;
+    ERR error = NTEXEngine::load_app(app_file, &application);
+    if(error != OK){
+        nt_log("kernel: there was a error while executing app '" + filename + "'");
+        nt_log("kernel: app '" + filename + "' returned error code: " + error);
+        return error;
     }
-    
-    app_name[12] = '\0';
-    nt_log("kernel: running [" + nt_get_filename(file) + "] executable app: " + String(app_name) + ", version: " + String(app_version) + "");
-
     return OK;
 }
 
@@ -633,7 +611,7 @@ cseq NTSKRNL NTSKernel::nt_get_filename(file_t* file){
             nt_log(F("kernel: no storage device found, cannot open file, nt_get_filename();"), WARN);
             return "";
         }else {
-            nt_log("kernel: cannot get storage device, error: " + make_hex(err) + ", aborting: nt_get_filename();", ERROR);
+            nt_log("kernel: cannot get storage device, error: " + String(make_hex8(err)) + ", aborting: nt_get_filename();", ERROR);
             return "";
         }
     }

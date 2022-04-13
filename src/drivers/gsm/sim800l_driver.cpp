@@ -93,7 +93,7 @@ gsm_response send_command(char* command){
 }
 
 gsm_number NTSKRNL SIM800L_Driver::incoming_status(){
-
+    
 }
 
 uint8_t NTSKRNL SIM800L_Driver::signal_strength(){
