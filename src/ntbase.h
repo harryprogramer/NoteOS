@@ -3,11 +3,11 @@
 
 typedef char* stdcseq;
 
-typedef signed int INT8 __attribute__((__mode__(__QI__)));
-typedef unsigned int UINT8 __attribute__((__mode__(__QI__)));
-typedef signed int INT16 __attribute__((__mode__(__HI__)));
-typedef unsigned int UINT16 __attribute__((__mode__(__HI__)));
-typedef signed int INT32 __attribute__((__mode__(__SI__)));
-typedef unsigned int UINT32 __attribute__((__mode__(__SI__)));
+typedef int_fast8_t INT8 __attribute__((__mode__(__QI__)));
+typedef uint_fast8_t UINT8 __attribute__((__mode__(__QI__)));
+typedef int_fast16_t INT16 __attribute__((__mode__(__HI__)));
+typedef uint_fast16_t UINT16 __attribute__((__mode__(__HI__)));
+typedef int_fast32_t INT32 __attribute__((__mode__(__SI__)));
+typedef uint_fast32_t UINT32 __attribute__((__mode__(__SI__)));
 
 #endif

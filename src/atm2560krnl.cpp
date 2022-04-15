@@ -34,6 +34,11 @@
 #include "drivers/gsm/sim800l_driver.hpp"
 #endif
 
+
+#if PNTPOWER_DRIVER
+#include "drivers/power/pnt_power_driver.hpp"
+#endif
+
 #include "drivers/storage/spisdstorage.hpp"
 
 #define MAX_DRIVER_ABOUT_NAME 64
@@ -244,6 +249,11 @@ void init_drivers(){
     NTSKernel::nt_load_idvc_drvr(gsm_drvr, IDVC_GSM);
 #endif
 
+#if PNTPOWER_DRIVER
+    PNTPowerDriver* power_manager = new PNTPowerDriver;
+    NTSKernel::nt_load_idvc_drvr(power_manager, IDVC_POWER);
+#endif
+
     SPISDStorage* storage_drvr = new SPISDStorage;
     NTSKernel::nt_load_idvc_drvr(storage_drvr, IDVC_STORAGE);
 }
@@ -322,15 +332,17 @@ cseq translate_loglevel(LOG_LEVEL level){
     }else {
         return "nolevel";
     }
-}
+}   
 
-void NTSKRNL NTSKernel::nt_log(const cseq msg, LOG_LEVEL level){
+void NTSKRNL NTSKernel::nt_log(const cseq msg, LOG_LEVEL level, const char* caller){
     cseq level_str = translate_loglevel(level);
     if(strcmp(level_str.c_str(), "nolevel") != 0){
         Serial.print("[");
         Serial.print(String(millis() / 1000.0, 4));
         Serial.print("] [");
         Serial.print(level_str);
+        Serial.print("] [");
+        Serial.print(String(caller) + "()");
         Serial.print("]: ");
         Serial.print(msg);
         Serial.print("\n");

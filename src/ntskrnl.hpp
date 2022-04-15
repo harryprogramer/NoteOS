@@ -63,6 +63,7 @@ typedef UINT8 BYTE;
 #define IDVC_DISPLAY (idvc_id) 0x1E
 #define IDVC_STORAGE (idvc_id) 0x1F
 #define IDVC_GSM     (idvc_id) 0x23
+#define IDVC_POWER   (idvc_id) 0x24
 
 #define NT_ALLOC_NOT_ENOUGH_MEMORY  0x20
 #define NT_ALLOC_ALLOC_FAULT        0x21
@@ -189,16 +190,16 @@ class IDVCDriver_PowerManager : virtual public IDVCHIDriver {
     };
 
     typedef struct battery {
-      uint8_t percent;
-      uint16_t voltage;
-      uint16_t capacity;;
+      UINT8 percent;
+      UINT8 voltage;
+      UINT16 capacity;
     } battery, *battery_p;
 
-    virtual NTSKRNL PowerSource get_power_source();
+    virtual NTSKRNL PowerSource get_power_source() = 0;
 
-    virtual NTSKRNL ERR get_battery(battery*);
+    virtual NTSKRNL ERR get_battery(battery*) = 0;
 
-    virtual NTSKRNL ERR shutdown_power();
+    virtual NTSKRNL ERR shutdown_power() = 0;
 
 };
 
@@ -232,7 +233,7 @@ namespace NTSKernel {
 
   ERR NTSKRNL nt_get_idvc_drvr(IDVCHIDriver** drvr, idvc_id id);
 
-  void NTSKRNL nt_log(const cseq msg, LOG_LEVEL level = INFO);
+  void NTSKRNL nt_log(const cseq msg, LOG_LEVEL level = INFO, const char* caller = __builtin_FUNCTION());
 
   void NTSKRNL nt_cls_krnl_sequence();
 
